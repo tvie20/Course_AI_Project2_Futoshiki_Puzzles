@@ -1,5 +1,10 @@
 import heapq
-import copy
+import sys
+import os
+
+# Add the test directory directly to sys.path to avoid clash with stdlib 'test'
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'test'))
+from test_utils import BaseSolver, SearchLimitExceeded
 from algo.solver_utils import find_first_empty_cell, is_valid
 
 def heuristic_1_unassigned(board):
@@ -31,7 +36,7 @@ def get_initial_domains(board):
                 domains[r][c] = {board[r][c]}
     return domains
 
-def apply_ac3_propagation(board, domains, constraints):
+def apply_ac3_propagation(board, domains, constraints, stats=None):
     N = len(board)
     changed = True
     while changed:
@@ -46,14 +51,17 @@ def apply_ac3_propagation(board, domains, constraints):
                         if c != c2 and val in domains[r][c2]:
                             domains[r][c2].remove(val)
                             changed = True
+                            if stats: stats.inferences += 1
                     # Col constraints
                     for r2 in range(N):
                         if r != r2 and val in domains[r2][c]:
                             domains[r2][c].remove(val)
                             changed = True
+                            if stats: stats.inferences += 1
                             
         # Inequality constraints
         for constraint in constraints:
+            if stats: stats.check_limits()
             r1, c1, op, r2, c2 = constraint
             
             if op == '<':
@@ -63,6 +71,7 @@ def apply_ac3_propagation(board, domains, constraints):
                     for v1 in to_remove:
                         domains[r1][c1].remove(v1)
                         changed = True
+                        if stats: stats.inferences += 1
                         
                 if domains[r1][c1]:
                     min_d1 = min(domains[r1][c1])
@@ -70,6 +79,7 @@ def apply_ac3_propagation(board, domains, constraints):
                     for v2 in to_remove:
                         domains[r2][c2].remove(v2)
                         changed = True
+                        if stats: stats.inferences += 1
                         
             elif op == '>':
                 if domains[r2][c2]:
@@ -78,6 +88,7 @@ def apply_ac3_propagation(board, domains, constraints):
                     for v1 in to_remove:
                         domains[r1][c1].remove(v1)
                         changed = True
+                        if stats: stats.inferences += 1
                         
                 if domains[r1][c1]:
                     max_d1 = max(domains[r1][c1])
@@ -85,10 +96,11 @@ def apply_ac3_propagation(board, domains, constraints):
                     for v2 in to_remove:
                         domains[r2][c2].remove(v2)
                         changed = True
+                        if stats: stats.inferences += 1
 
-def heuristic_3_ac3(board, constraints):
+def heuristic_3_ac3(board, constraints, stats=None):
     domains = get_initial_domains(board)
-    apply_ac3_propagation(board, domains, constraints)
+    apply_ac3_propagation(board, domains, constraints, stats)
     
     for r in range(len(board)):
         for c in range(len(board)):
@@ -97,13 +109,13 @@ def heuristic_3_ac3(board, constraints):
                 
     return heuristic_1_unassigned(board)
 
-def calculate_heuristic(board, constraints, heuristic_choice):
+def calculate_heuristic(board, constraints, heuristic_choice, stats=None):
     if heuristic_choice == 'h1':
         return heuristic_1_unassigned(board)
     elif heuristic_choice == 'h2':
         return heuristic_2_chains(board, constraints)
     elif heuristic_choice == 'h3':
-        return heuristic_3_ac3(board, constraints)
+        return heuristic_3_ac3(board, constraints, stats)
     return heuristic_1_unassigned(board)
 
 class State:
@@ -118,44 +130,53 @@ class State:
             return self.g > other.g
         return self.f < other.f
 
-def a_star_solve(initial_board, constraints, heuristic_choice='h1'):
-    priority_queue = []
-    
-    h_start = calculate_heuristic(initial_board, constraints, heuristic_choice)
-    if h_start == float('inf'):
-        return False
+class AStarSolver(BaseSolver):
+    def __init__(self, time_limit=60.0, max_expansions=1000000, max_inferences=1000000, heuristic_choice='h1'):
+        super().__init__(time_limit, max_expansions, max_inferences)
+        self.heuristic_choice = heuristic_choice
+
+    def _run_algorithm(self, initial_board, constraints):
+        priority_queue = []
         
-    heapq.heappush(priority_queue, State(h_start, 0, initial_board))
-    
-    while priority_queue:
-        current_state = heapq.heappop(priority_queue)
-        f = current_state.f
-        g = current_state.g
-        current_board = current_state.board
-        
-        row, col = find_first_empty_cell(current_board)
-        
-        # Base Case: Board is full
-        if row is None:
-            # Copy solution back to initial_board
-            for r in range(len(current_board)):
-                for c in range(len(current_board)):
-                    initial_board[r][c] = current_board[r][c]
-            return True
+        h_start = calculate_heuristic(initial_board, constraints, self.heuristic_choice, self.stats)
+        if h_start == float('inf'):
+            return False
             
-        N = len(current_board)
+        heapq.heappush(priority_queue, State(h_start, 0, initial_board))
         
-        # Generate successors
-        for value in range(1, N + 1):
-            if is_valid(current_board, row, col, value, constraints):
-                new_board = [r[:] for r in current_board]
-                new_board[row][col] = value
+        while priority_queue:
+            self.stats.check_limits()
+            
+            current_state = heapq.heappop(priority_queue)
+            self.stats.expansions += 1
+            
+            f = current_state.f
+            g = current_state.g
+            current_board = current_state.board
+            
+            row, col = find_first_empty_cell(current_board)
+            
+            # Base Case: Board is full
+            if row is None:
+                # Copy solution back to initial_board
+                for r in range(len(current_board)):
+                    for c in range(len(current_board)):
+                        initial_board[r][c] = current_board[r][c]
+                return True
                 
-                new_g = g + 1
-                new_h = calculate_heuristic(new_board, constraints, heuristic_choice)
-                
-                if new_h != float('inf'):
-                    new_f = new_g + new_h
-                    heapq.heappush(priority_queue, State(new_f, new_g, new_board))
+            N = len(current_board)
+            
+            # Generate successors
+            for value in range(1, N + 1):
+                if is_valid(current_board, row, col, value, constraints):
+                    new_board = [r[:] for r in current_board]
+                    new_board[row][col] = value
                     
-    return False
+                    new_g = g + 1
+                    new_h = calculate_heuristic(new_board, constraints, self.heuristic_choice, self.stats)
+                    
+                    if new_h != float('inf'):
+                        new_f = new_g + new_h
+                        heapq.heappush(priority_queue, State(new_f, new_g, new_board))
+                        
+        return False
