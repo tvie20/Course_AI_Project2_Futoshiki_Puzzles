@@ -1,0 +1,4 @@
+```text
+# No external libraries required for Atu's Data & KB module.
+# Python >= 3.7
+```
