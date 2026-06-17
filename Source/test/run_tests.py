@@ -73,17 +73,10 @@ def run_all_tests(time_limit=180.0, max_expansions=1000000, max_inferences=10000
             run_time = solver.stats.get_run_time()
             memory_used = peak
             
-            if name == "A* Search (h3)":
-                exp_inf = f"{solver.stats.expansions} / {solver.stats.inferences}"
-            elif name in ["Forward Chaining", "Backward Chaining"]:
-                exp_inf = f"{solver.stats.inferences}"
-            else:
-                exp_inf = f"{solver.stats.expansions}"
-                
             correctness = "Yes" if result is True else ("Limit Exceeded" if result is None else "No")
             heuristic_time = solver.stats.heuristic_time
             
-            print(f"  {name}: Correct={correctness}, Time={run_time:.4f}s (H_Time: {heuristic_time:.4f}s), Mem={format_memory(memory_used)}, Exp/Inf={exp_inf}")
+            print(f"  {name}: Correct={correctness}, Time={run_time:.4f}s (H_Time: {heuristic_time:.4f}s), Mem={format_memory(memory_used)}, Exp={solver.stats.expansions}, Inf={solver.stats.inferences}")
 
             detailed_results.append({
                 "Test": f"Input-{i:02d}",
@@ -92,7 +85,8 @@ def run_all_tests(time_limit=180.0, max_expansions=1000000, max_inferences=10000
                 "Run Time (s)": f"{run_time:.4f}",
                 "Heuristic Time (s)": f"{heuristic_time:.4f}",
                 "Memory": format_memory(memory_used),
-                "Inferences/Expansions": exp_inf
+                "Expansions": solver.stats.expansions,
+                "Inferences": solver.stats.inferences
             })
 
             # Aggregate
@@ -112,8 +106,8 @@ def run_all_tests(time_limit=180.0, max_expansions=1000000, max_inferences=10000
         f.write(f"Limits: {time_limit} seconds, {max_expansions} expansions, {max_inferences} inferences\n\n")
         
         f.write("## Average Results (Over 10 tests)\n\n")
-        f.write("| Algorithm | Correctness | Avg Run Time (s) | Avg Heuristic Time (s) | Avg Memory | Avg Inferences/Expansions |\n")
-        f.write("|---|---|---|---|---|---|\n")
+        f.write("| Algorithm | Correctness | Avg Run Time (s) | Avg Heuristic Time (s) | Avg Memory | Avg Expansions | Avg Inferences |\n")
+        f.write("|---|---|---|---|---|---|---|\n")
         for name, stats in aggregated_results.items():
             count = stats["count"]
             if count == 0: continue
@@ -125,20 +119,13 @@ def run_all_tests(time_limit=180.0, max_expansions=1000000, max_inferences=10000
             avg_exp = stats["expansions"] / count
             avg_inf = stats["inferences"] / count
             
-            if name == "A* Search (h3)":
-                avg_exp_inf = f"{avg_exp:.0f} / {avg_inf:.0f}"
-            elif name in ["Forward Chaining", "Backward Chaining"]:
-                avg_exp_inf = f"{avg_inf:.0f}"
-            else:
-                avg_exp_inf = f"{avg_exp:.0f}"
-            
-            f.write(f"| {name} | {pct_correct:.0f}% | {avg_time:.4f} | {avg_htime:.4f} | {format_memory(avg_mem)} | {avg_exp_inf} |\n")
+            f.write(f"| {name} | {pct_correct:.0f}% | {avg_time:.4f} | {avg_htime:.4f} | {format_memory(avg_mem)} | {avg_exp:.0f} | {avg_inf:.0f} |\n")
             
         f.write("\n## Detailed Results\n\n")
-        f.write("| Test | Algorithm | Correctness | Run Time (s) | Heuristic Time (s) | Memory | Inferences/Expansions |\n")
-        f.write("|---|---|---|---|---|---|---|\n")
+        f.write("| Test | Algorithm | Correctness | Run Time (s) | Heuristic Time (s) | Memory | Expansions | Inferences |\n")
+        f.write("|---|---|---|---|---|---|---|---|\n")
         for res in detailed_results:
-            f.write(f"| {res['Test']} | {res['Algorithm']} | {res['Correctness']} | {res['Run Time (s)']} | {res['Heuristic Time (s)']} | {res['Memory']} | {res['Inferences/Expansions']} |\n")
+            f.write(f"| {res['Test']} | {res['Algorithm']} | {res['Correctness']} | {res['Run Time (s)']} | {res['Heuristic Time (s)']} | {res['Memory']} | {res['Expansions']} | {res['Inferences']} |\n")
 
     print(f"\nResults successfully written to {output_md}")
 
