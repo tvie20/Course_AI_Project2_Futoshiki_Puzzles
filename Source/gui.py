@@ -1,16 +1,24 @@
 import os
 import tkinter as tk
 from tkinter import filedialog, messagebox
+from io import StringIO
 
 from futoshiki_io import read_input, validate_puzzle
 from kb_generator import generate_ground_kb, generate_cnf, write_dimacs_cnf
+from inference import backward_chaining, print_solution
+
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+INPUT_DIR = os.path.join(BASE_DIR, "Inputs")
+OUTPUT_DIR = os.path.join(BASE_DIR, "Outputs")
+CNF_DIR = os.path.join(BASE_DIR, "CNF")
 
 
 class FutoshikiGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("Futoshiki Project 2 - Data & KB GUI")
-        self.root.geometry("900x650")
+        self.root.title("Futoshiki Project 2 - Logic Solver GUI")
+        self.root.geometry("1050x700")
 
         self.current_puzzle = None
         self.current_file = None
@@ -20,7 +28,7 @@ class FutoshikiGUI:
     def create_widgets(self):
         title = tk.Label(
             self.root,
-            text="Futoshiki Puzzle - Data, KB & CNF Generator",
+            text="Futoshiki Puzzle - Data, KB, CNF & Solver",
             font=("Arial", 18, "bold")
         )
         title.pack(pady=10)
@@ -44,13 +52,21 @@ class FutoshikiGUI:
         )
         btn_kb.grid(row=0, column=1, padx=5)
 
+        btn_solve = tk.Button(
+            button_frame,
+            text="Solve",
+            width=18,
+            command=self.solve_puzzle
+        )
+        btn_solve.grid(row=0, column=2, padx=5)
+
         btn_export = tk.Button(
             button_frame,
             text="Export CNF",
             width=18,
             command=self.export_cnf
         )
-        btn_export.grid(row=0, column=2, padx=5)
+        btn_export.grid(row=0, column=3, padx=5)
 
         btn_clear = tk.Button(
             button_frame,
@@ -58,7 +74,7 @@ class FutoshikiGUI:
             width=18,
             command=self.clear_output
         )
-        btn_clear.grid(row=0, column=3, padx=5)
+        btn_clear.grid(row=0, column=4, padx=5)
 
         self.file_label = tk.Label(
             self.root,
@@ -76,7 +92,7 @@ class FutoshikiGUI:
 
     def open_input_file(self):
         path = filedialog.askopenfilename(
-            initialdir="Inputs",
+            initialdir=INPUT_DIR,
             title="Select input file",
             filetypes=[("Text files", "*.txt"), ("All files", "*.*")]
         )
@@ -102,6 +118,12 @@ class FutoshikiGUI:
             messagebox.showerror("Error", str(e))
 
     def display_puzzle(self, puzzle):
+        """
+        Hiển thị đề bài ban đầu.
+        Dấu . là ô trống.
+        Dấu ^ nghĩa là top < bottom.
+        Dấu v nghĩa là top > bottom.
+        """
         N = puzzle["N"]
         grid = puzzle["grid"]
         horizontal = puzzle["horizontal"]
@@ -121,6 +143,7 @@ class FutoshikiGUI:
 
                 if j < N - 1:
                     sign = horizontal[i][j]
+
                     if sign == 1:
                         row_text += "<"
                     elif sign == -1:
@@ -136,6 +159,8 @@ class FutoshikiGUI:
                 for j in range(N):
                     sign = vertical[i][j]
 
+                    # Theo đề: 1 = top < bottom, -1 = top > bottom.
+                    # Khi hiển thị dọc: ^ = top < bottom, v = top > bottom.
                     if sign == 1:
                         vertical_text += " ^ "
                     elif sign == -1:
@@ -182,20 +207,58 @@ class FutoshikiGUI:
         except Exception as e:
             messagebox.showerror("Error", str(e))
 
+    def solve_puzzle(self):
+        if self.current_puzzle is None:
+            messagebox.showwarning("Warning", "Please open an input file first.")
+            return
+
+        try:
+            kb = generate_ground_kb(self.current_puzzle)
+
+            self.write_line("")
+            self.write_line("========== SOLVING ==========")
+
+            is_solved, assignment = backward_chaining(kb)
+
+            if not is_solved:
+                self.write_line("No solution found.")
+                messagebox.showwarning("Result", "No solution found.")
+                return
+
+            buffer = StringIO()
+            print_solution(self.current_puzzle, assignment, file_object=buffer)
+            solution_text = buffer.getvalue()
+
+            self.write_line("Solution:")
+            self.write_text(solution_text)
+            self.write_line("Solution generated successfully.")
+
+            os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+            output_path = self.get_output_path()
+            with open(output_path, "w", encoding="utf-8") as f:
+                f.write(solution_text)
+
+            self.write_line(f"Saved solution to: {output_path}")
+            messagebox.showinfo("Success", f"Solved and saved to:\n{output_path}")
+
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
+
     def export_cnf(self):
         if self.current_puzzle is None:
             messagebox.showwarning("Warning", "Please open an input file first.")
             return
 
         try:
-            os.makedirs("CNF", exist_ok=True)
+            os.makedirs(CNF_DIR, exist_ok=True)
 
             if self.current_file:
                 base_name = os.path.basename(self.current_file)
                 name_without_ext = os.path.splitext(base_name)[0]
-                output_path = os.path.join("CNF", name_without_ext + ".cnf")
+                output_path = os.path.join(CNF_DIR, name_without_ext + ".cnf")
             else:
-                output_path = os.path.join("CNF", "output.cnf")
+                output_path = os.path.join(CNF_DIR, "output.cnf")
 
             write_dimacs_cnf(self.current_puzzle, output_path)
 
@@ -206,11 +269,34 @@ class FutoshikiGUI:
         except Exception as e:
             messagebox.showerror("Error", str(e))
 
+    def get_output_path(self):
+        """
+        Nếu mở Inputs/input-01.txt thì lưu thành Outputs/output-01.txt.
+        """
+        if self.current_file:
+            base_name = os.path.basename(self.current_file)
+            name_without_ext = os.path.splitext(base_name)[0]
+
+            if name_without_ext.startswith("input"):
+                output_name = name_without_ext.replace("input", "output", 1) + ".txt"
+            else:
+                output_name = name_without_ext + "_solution.txt"
+
+            return os.path.join(OUTPUT_DIR, output_name)
+
+        return os.path.join(OUTPUT_DIR, "output.txt")
+
     def clear_output(self):
         self.text_area.delete("1.0", tk.END)
 
     def write_line(self, text):
         self.text_area.insert(tk.END, text + "\n")
+        self.text_area.see(tk.END)
+
+    def write_text(self, text):
+        self.text_area.insert(tk.END, text)
+        if not text.endswith("\n"):
+            self.text_area.insert(tk.END, "\n")
         self.text_area.see(tk.END)
 
 

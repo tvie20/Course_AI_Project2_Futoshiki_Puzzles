@@ -194,3 +194,225 @@ class BackwardChainingSolver(BaseSolver):
         if backtrack(0):
             return True
         return False
+def forward_chaining(kb):
+    """
+    Wrapper cho main.py.
+    Trả về:
+    is_solved: True/False
+    domains: dict[(i,j)] -> set(values)
+    """
+    N = kb["N"]
+    domains = {cell: set(vals) for cell, vals in kb["domains"].items()}
+
+    for constraint in kb["given_constraints"]:
+        _, cell, val = constraint
+        domains[cell] = {val}
+
+    changed = True
+    while changed:
+        changed = False
+
+        if any(len(d) == 0 for d in domains.values()):
+            return False, domains
+
+        # Row/column propagation
+        for i in range(1, N + 1):
+            for j in range(1, N + 1):
+                cell = (i, j)
+
+                if len(domains[cell]) == 1:
+                    val = next(iter(domains[cell]))
+
+                    for c in range(1, N + 1):
+                        other = (i, c)
+                        if c != j and val in domains[other]:
+                            domains[other].remove(val)
+                            changed = True
+
+                    for r in range(1, N + 1):
+                        other = (r, j)
+                        if r != i and val in domains[other]:
+                            domains[other].remove(val)
+                            changed = True
+
+        # Inequality propagation
+        for constraint in kb["inequality_constraints"]:
+            ctype, cell_A, cell_B = constraint
+            dom_A = domains[cell_A]
+            dom_B = domains[cell_B]
+
+            if not dom_A or not dom_B:
+                return False, domains
+
+            if ctype == "less":
+                max_B = max(dom_B)
+                remove_A = {x for x in dom_A if x >= max_B}
+                if remove_A:
+                    domains[cell_A] = dom_A - remove_A
+                    changed = True
+
+                min_A = min(domains[cell_A])
+                remove_B = {x for x in dom_B if x <= min_A}
+                if remove_B:
+                    domains[cell_B] = dom_B - remove_B
+                    changed = True
+
+            elif ctype == "greater":
+                min_B = min(dom_B)
+                remove_A = {x for x in dom_A if x <= min_B}
+                if remove_A:
+                    domains[cell_A] = dom_A - remove_A
+                    changed = True
+
+                max_A = max(domains[cell_A])
+                remove_B = {x for x in dom_B if x >= max_A}
+                if remove_B:
+                    domains[cell_B] = dom_B - remove_B
+                    changed = True
+
+    is_solved = all(len(d) == 1 for d in domains.values())
+    return is_solved, domains
+
+
+def backward_chaining(kb):
+    """
+    Wrapper cho main.py.
+    Dùng backtracking để tìm assignment hoàn chỉnh.
+    Trả về:
+    is_solved: True/False
+    assignment: dict[(i,j)] -> value
+    """
+    N = kb["N"]
+    inequality_constraints = kb["inequality_constraints"]
+
+    assignment = {}
+
+    for constraint in kb["given_constraints"]:
+        _, cell, val = constraint
+        assignment[cell] = val
+
+    unassigned_cells = []
+
+    for i in range(1, N + 1):
+        for j in range(1, N + 1):
+            if (i, j) not in assignment:
+                unassigned_cells.append((i, j))
+
+    def local_is_consistent(cell, val):
+        i, j = cell
+
+        for c in range(1, N + 1):
+            if (i, c) in assignment and assignment[(i, c)] == val:
+                return False
+
+        for r in range(1, N + 1):
+            if (r, j) in assignment and assignment[(r, j)] == val:
+                return False
+
+        for constraint in inequality_constraints:
+            ctype, cell_A, cell_B = constraint
+
+            if cell == cell_A and cell_B in assignment:
+                if ctype == "less" and not (val < assignment[cell_B]):
+                    return False
+                if ctype == "greater" and not (val > assignment[cell_B]):
+                    return False
+
+            elif cell == cell_B and cell_A in assignment:
+                if ctype == "less" and not (assignment[cell_A] < val):
+                    return False
+                if ctype == "greater" and not (assignment[cell_A] > val):
+                    return False
+
+            elif cell_A in assignment and cell_B in assignment:
+                if ctype == "less" and not (assignment[cell_A] < assignment[cell_B]):
+                    return False
+                if ctype == "greater" and not (assignment[cell_A] > assignment[cell_B]):
+                    return False
+
+        return True
+
+    def backtrack(index):
+        if index == len(unassigned_cells):
+            return True
+
+        cell = unassigned_cells[index]
+
+        for val in range(1, N + 1):
+            if local_is_consistent(cell, val):
+                assignment[cell] = val
+
+                if backtrack(index + 1):
+                    return True
+
+                del assignment[cell]
+
+        return False
+
+    solved = backtrack(0)
+    return solved, assignment
+
+
+def print_solution(puzzle, solution, file_object=None):
+    """
+    In solution theo format có giữ dấu bất đẳng thức.
+    solution có thể là:
+    - assignment: dict[(i,j)] -> value
+    - domains: dict[(i,j)] -> set({value})
+    """
+    N = puzzle["N"]
+    horizontal = puzzle["horizontal"]
+    vertical = puzzle["vertical"]
+
+    def get_value(i, j):
+        cell = (i, j)
+        value = solution.get(cell, ".")
+
+        if isinstance(value, set):
+            if len(value) == 1:
+                return str(next(iter(value)))
+            return "."
+
+        return str(value)
+
+    def write_line(text):
+        if file_object is None:
+            print(text)
+        else:
+            file_object.write(text + "\n")
+
+    for i in range(1, N + 1):
+        row_text = ""
+
+        for j in range(1, N + 1):
+            row_text += get_value(i, j)
+
+            if j < N:
+                sign = horizontal[i - 1][j - 1]
+
+                if sign == 1:
+                    row_text += " < "
+                elif sign == -1:
+                    row_text += " > "
+                else:
+                    row_text += "   "
+
+        write_line(row_text)
+
+        if i < N:
+            vertical_text = ""
+
+            for j in range(1, N + 1):
+                sign = vertical[i - 1][j - 1]
+
+                if sign == 1:
+                    vertical_text += "^"
+                elif sign == -1:
+                    vertical_text += "v"
+                else:
+                    vertical_text += " "
+
+                if j < N:
+                    vertical_text += "   "
+
+            write_line(vertical_text)
