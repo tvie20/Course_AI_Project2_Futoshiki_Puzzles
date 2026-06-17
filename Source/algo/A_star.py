@@ -110,13 +110,22 @@ def heuristic_3_ac3(board, constraints, stats=None):
     return heuristic_1_unassigned(board)
 
 def calculate_heuristic(board, constraints, heuristic_choice, stats=None):
+    import time
+    start_time = time.perf_counter()
+    
     if heuristic_choice == 'h1':
-        return heuristic_1_unassigned(board)
+        res = heuristic_1_unassigned(board)
     elif heuristic_choice == 'h2':
-        return heuristic_2_chains(board, constraints)
+        res = heuristic_2_chains(board, constraints)
     elif heuristic_choice == 'h3':
-        return heuristic_3_ac3(board, constraints, stats)
-    return heuristic_1_unassigned(board)
+        res = heuristic_3_ac3(board, constraints, stats)
+    else:
+        res = heuristic_1_unassigned(board)
+        
+    if stats:
+        stats.heuristic_time += time.perf_counter() - start_time
+        
+    return res
 
 class State:
     def __init__(self, f, g, board):

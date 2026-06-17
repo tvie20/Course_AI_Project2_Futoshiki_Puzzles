@@ -5,9 +5,10 @@ class SearchLimitExceeded(Exception):
     pass
 
 class SearchStats:
-    def __init__(self, time_limit=60.0, max_expansions=1000000, max_inferences=1000000):
+    def __init__(self, time_limit=180.0, max_expansions=1000000, max_inferences=1000000):
         self.expansions = 0
         self.inferences = 0
+        self.heuristic_time = 0.0
         self.time_limit = time_limit
         self.max_expansions = max_expansions
         self.max_inferences = max_inferences
