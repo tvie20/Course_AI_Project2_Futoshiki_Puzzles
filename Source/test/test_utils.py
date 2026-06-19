@@ -31,11 +31,14 @@ class SearchStats:
             raise SearchLimitExceeded("Time limit reached")
 
 class BaseSolver:
-    def __init__(self, time_limit=60.0, max_expansions=1000000, max_inferences=1000000):
+    def __init__(self, time_limit=60.0, max_expansions=1000000, max_inferences=1000000, record_steps=False):
         self.stats = SearchStats(time_limit, max_expansions, max_inferences)
+        self.record_steps = record_steps
+        self.steps = []
         
     def solve(self, board, constraints):
         self.stats.start_timer()
+        self.steps = []  # Reset steps on each run
         try:
             return self._run_algorithm(board, constraints)
         except SearchLimitExceeded:

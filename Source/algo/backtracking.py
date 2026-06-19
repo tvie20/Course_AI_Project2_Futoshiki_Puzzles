@@ -23,6 +23,12 @@ class BacktrackingSolver(BaseSolver):
             if is_valid(board, row, col, value, constraints):
                 board[row][col] = value
                 
+                if self.record_steps:
+                    self.steps.append({
+                        "step": self.stats.expansions,
+                        "board": [r[:] for r in board]
+                    })
+                
                 # Recursively solve
                 if self._run_algorithm(board, constraints):
                     return True

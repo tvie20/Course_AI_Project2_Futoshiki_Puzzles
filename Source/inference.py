@@ -194,15 +194,17 @@ class BackwardChainingSolver(BaseSolver):
         if backtrack(0):
             return True
         return False
-def forward_chaining(kb):
+def forward_chaining(kb, record_steps=False):
     """
     Wrapper cho main.py.
     Trả về:
     is_solved: True/False
     domains: dict[(i,j)] -> set(values)
+    Nếu record_steps=True: trả về thêm list steps
     """
     N = kb["N"]
     domains = {cell: set(vals) for cell, vals in kb["domains"].items()}
+    steps = []
 
     for constraint in kb["given_constraints"]:
         _, cell, val = constraint
@@ -212,7 +214,16 @@ def forward_chaining(kb):
     while changed:
         changed = False
 
+        if record_steps:
+            assignment = {cell: list(vals)[0] for cell, vals in domains.items() if len(vals) == 1}
+            steps.append({
+                "step": len(steps) + 1,
+                "assignment": assignment
+            })
+
         if any(len(d) == 0 for d in domains.values()):
+            if record_steps:
+                return False, domains, steps
             return False, domains
 
         # Row/column propagation
@@ -242,6 +253,8 @@ def forward_chaining(kb):
             dom_B = domains[cell_B]
 
             if not dom_A or not dom_B:
+                if record_steps:
+                    return False, domains, steps
                 return False, domains
 
             if ctype == "less":
@@ -271,21 +284,25 @@ def forward_chaining(kb):
                     changed = True
 
     is_solved = all(len(d) == 1 for d in domains.values())
+    if record_steps:
+        return is_solved, domains, steps
     return is_solved, domains
 
 
-def backward_chaining(kb):
+def backward_chaining(kb, record_steps=False):
     """
     Wrapper cho main.py.
     Dùng backtracking để tìm assignment hoàn chỉnh.
     Trả về:
     is_solved: True/False
     assignment: dict[(i,j)] -> value
+    Nếu record_steps=True: trả về thêm list steps
     """
     N = kb["N"]
     inequality_constraints = kb["inequality_constraints"]
 
     assignment = {}
+    steps = []
 
     for constraint in kb["given_constraints"]:
         _, cell, val = constraint
@@ -341,6 +358,12 @@ def backward_chaining(kb):
         for val in range(1, N + 1):
             if local_is_consistent(cell, val):
                 assignment[cell] = val
+                
+                if record_steps:
+                    steps.append({
+                        "step": len(steps) + 1,
+                        "assignment": assignment.copy()
+                    })
 
                 if backtrack(index + 1):
                     return True
@@ -350,6 +373,8 @@ def backward_chaining(kb):
         return False
 
     solved = backtrack(0)
+    if record_steps:
+        return solved, assignment, steps
     return solved, assignment
 
 

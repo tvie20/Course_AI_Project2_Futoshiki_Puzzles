@@ -44,9 +44,9 @@ class FutoshikiGUI:
         self.current_puzzle = None
         self.current_file = None
 
-        # A* visualizer state
-        self.astar_trace = []
-        self._astar_current_step = 0
+        # Step visualizer state
+        self.step_trace = []
+        self._current_step = 0
         self._autoplay_job = None
 
         self.create_widgets()
@@ -149,34 +149,34 @@ class FutoshikiGUI:
         )
         self.grid_canvas.pack(fill="x", padx=5, pady=5)
 
-        # ── A* Step Visualizer (hidden until an A* algo is selected) ─────────
-        self.astar_frame = tk.LabelFrame(self.root, text="A* Step Visualizer", font=("Arial", 10))
-        # Not packed initially; shown by _on_algo_changed when needed.
+        # ── Step Visualizer ──────────────────────────────────────────────────
+        self.step_visualizer_frame = tk.LabelFrame(self.root, text="Step Visualizer", font=("Arial", 10))
+        self.step_visualizer_frame.pack(padx=10, pady=(0, 3), fill="x")
 
-        self.astar_step_label = tk.Label(
-            self.astar_frame,
+        self.step_label = tk.Label(
+            self.step_visualizer_frame,
             text="No trace loaded.",
             font=("Consolas", 10),
             anchor="w",
         )
-        self.astar_step_label.pack(fill="x", padx=10, pady=4)
+        self.step_label.pack(fill="x", padx=10, pady=4)
 
-        slider_nav = tk.Frame(self.astar_frame)
+        slider_nav = tk.Frame(self.step_visualizer_frame)
         slider_nav.pack(fill="x", padx=10, pady=(0, 6))
 
-        self.astar_slider = ttk.Scale(
+        self.step_slider = ttk.Scale(
             slider_nav, from_=0, to=0, orient="horizontal", command=self._on_slider_moved
         )
-        self.astar_slider.pack(side="left", fill="x", expand=True, padx=(0, 8))
+        self.step_slider.pack(side="left", fill="x", expand=True, padx=(0, 8))
 
-        tk.Button(slider_nav, text="◀ Prev", width=8, command=self._astar_prev).pack(
+        tk.Button(slider_nav, text="◀ Prev", width=8, command=self._step_prev).pack(
             side="left", padx=2
         )
-        tk.Button(slider_nav, text="▶ Next", width=8, command=self._astar_next).pack(
+        tk.Button(slider_nav, text="▶ Next", width=8, command=self._step_next).pack(
             side="left", padx=2
         )
         self.autoplay_btn = tk.Button(
-            slider_nav, text="▶▶ Auto", width=8, command=self._astar_autoplay_toggle
+            slider_nav, text="▶▶ Auto", width=8, command=self._step_autoplay_toggle
         )
         self.autoplay_btn.pack(side="left", padx=2)
 
@@ -199,59 +199,69 @@ class FutoshikiGUI:
     # ── Algorithm selector callback ──────────────────────────────────────────
 
     def _on_algo_changed(self, event=None):
-        """Show/hide the A* step visualizer based on selected algorithm."""
-        algo = self.algo_var.get()
-        if algo.startswith("A*"):
-            # Insert before the text log
-            self.astar_frame.pack(padx=10, pady=(0, 3), fill="x", before=self.text_area.master)
-        else:
-            self.astar_frame.pack_forget()
-            self._stop_autoplay()
+        self._stop_autoplay()
 
-    # ── A* step visualizer helpers ───────────────────────────────────────────
+    # ── Step visualizer helpers ──────────────────────────────────────────────
 
-    def _load_astar_trace(self, steps):
+    def _load_step_trace(self, steps):
         """Populate visualizer with a new step list."""
-        self.astar_trace = steps
-        self._astar_current_step = 0
+        self.step_trace = steps
+        self._current_step = 0
         self._stop_autoplay()
         if steps:
-            self.astar_slider.config(to=max(0, len(steps) - 1))
-            self.astar_slider.set(0)
-            self._update_astar_display(0)
+            self.step_slider.config(to=max(0, len(steps) - 1))
+            self.step_slider.set(0)
+            self._update_step_display(0)
         else:
-            self.astar_step_label.config(text="No steps recorded (puzzle may have been solved immediately).")
+            self.step_label.config(text="No steps recorded (puzzle may have been solved immediately).")
 
-    def _update_astar_display(self, idx):
+    def _update_step_display(self, idx):
         idx = int(idx)
-        if not self.astar_trace:
+        if not self.step_trace:
             return
-        idx = max(0, min(idx, len(self.astar_trace) - 1))
-        self._astar_current_step = idx
-        s = self.astar_trace[idx]
-        r, c = s["cell"]   # 0-indexed → display as 1-indexed
-        self.astar_step_label.config(
-            text=(
-                f"Step {idx + 1} / {len(self.astar_trace)}  |  "
-                f"Next cell: ({r + 1}, {c + 1})  |  "
-                f"g = {s['g']}   h = {s['h']}   f = {s['f']}"
-            )
-        )
+        idx = max(0, min(idx, len(self.step_trace) - 1))
+        self._current_step = idx
+        s = self.step_trace[idx]
+        
+        # Extract assignment for drawing
+        if "assignment" in s:
+            assignment = s["assignment"]
+        elif "board" in s:
+            board = s["board"]
+            N = len(board)
+            assignment = {
+                (i + 1, j + 1): board[i][j]
+                for i in range(N) for j in range(N) if board[i][j] != 0
+            }
+        else:
+            assignment = {}
+            
+        self.draw_grid(self.current_puzzle, solution=assignment)
+
+        # Build label text
+        text = f"Step {idx + 1} / {len(self.step_trace)}"
+        if "cell" in s:
+            text += f"  |  Last Action: {s['cell']}"
+            
+        if "h" in s:
+            text += f"  |  g = {s['g']}   h = {s['h']}   f = {s['f']}"
+            
+        self.step_label.config(text=text)
 
     def _on_slider_moved(self, val):
-        self._update_astar_display(int(float(val)))
+        self._update_step_display(int(float(val)))
 
-    def _astar_prev(self):
-        if self._astar_current_step > 0:
-            self._update_astar_display(self._astar_current_step - 1)
-            self.astar_slider.set(self._astar_current_step)
+    def _step_prev(self):
+        if self._current_step > 0:
+            self._update_step_display(self._current_step - 1)
+            self.step_slider.set(self._current_step)
 
-    def _astar_next(self):
-        if self._astar_current_step < len(self.astar_trace) - 1:
-            self._update_astar_display(self._astar_current_step + 1)
-            self.astar_slider.set(self._astar_current_step)
+    def _step_next(self):
+        if self._current_step < len(self.step_trace) - 1:
+            self._update_step_display(self._current_step + 1)
+            self.step_slider.set(self._current_step)
 
-    def _astar_autoplay_toggle(self):
+    def _step_autoplay_toggle(self):
         if self._autoplay_job is not None:
             self._stop_autoplay()
         else:
@@ -259,11 +269,13 @@ class FutoshikiGUI:
             self._autoplay_step()
 
     def _autoplay_step(self):
-        if self._astar_current_step >= len(self.astar_trace) - 1:
+        if self._current_step >= len(self.step_trace) - 1:
             self._stop_autoplay()
             return
-        self._astar_next()
-        self._autoplay_job = self.root.after(500, self._autoplay_step)  # 500 ms fixed
+        self._step_next()
+        # Max 5s total -> interval = 5000 / num_steps
+        interval = max(1, 5000 // max(1, len(self.step_trace)))
+        self._autoplay_job = self.root.after(interval, self._autoplay_step)
 
     def _stop_autoplay(self):
         if self._autoplay_job is not None:
@@ -489,7 +501,7 @@ class FutoshikiGUI:
             "inferences": 0,
             "limit_msg": None,
             "error": None,
-            "astar_steps": [],
+            "steps": [],
         }
 
         try:
@@ -497,18 +509,20 @@ class FutoshikiGUI:
             if algo == "Forward Chaining":
                 kb = generate_ground_kb(puzzle)
                 t0 = time.perf_counter()
-                is_solved, domains = forward_chaining(kb)
+                is_solved, domains, steps = forward_chaining(kb, record_steps=True)
                 result["runtime"] = time.perf_counter() - t0
                 result["success"] = bool(is_solved)
                 result["domains"] = domains
+                result["steps"] = steps
 
             elif algo == "Backward Chaining":
                 kb = generate_ground_kb(puzzle)
                 t0 = time.perf_counter()
-                is_solved, assignment = backward_chaining(kb)
+                is_solved, assignment, steps = backward_chaining(kb, record_steps=True)
                 result["runtime"] = time.perf_counter() - t0
                 result["success"] = bool(is_solved)
                 result["assignment"] = assignment
+                result["steps"] = steps
 
             # ── Board-based algorithms ────────────────────────────────────────
             else:
@@ -519,12 +533,14 @@ class FutoshikiGUI:
                         time_limit=timeout,
                         max_expansions=max_exp,
                         max_inferences=max_exp,
+                        record_steps=True
                     )
                 elif algo == "Backtracking":
                     solver = BacktrackingSolver(
                         time_limit=timeout,
                         max_expansions=max_exp,
                         max_inferences=max_exp,
+                        record_steps=True
                     )
                 else:
                     # A* variants
@@ -546,6 +562,7 @@ class FutoshikiGUI:
                 result["expansions"] = solver.stats.expansions
                 result["inferences"] = solver.stats.inferences
                 result["board"] = board
+                result["steps"] = getattr(solver, "steps", [])
 
                 if res is True:
                     result["success"] = True
@@ -553,9 +570,6 @@ class FutoshikiGUI:
                     result["limit_msg"] = (
                         "Search limit reached (timeout or max expansions/inferences)."
                     )
-
-                if algo.startswith("A*"):
-                    result["astar_steps"] = getattr(solver, "steps", [])
 
         except Exception as exc:
             result["error"] = str(exc)
@@ -609,6 +623,16 @@ class FutoshikiGUI:
         self.write_line(f"Runtime: {runtime:.4f}s")
         N = puzzle["N"]
 
+        # ── Step Visualizer Processing ───────────────────────────────────────
+        steps = result.get("steps", [])
+        if len(steps) > 10000:
+            self.write_line(f"Trace too large to visualize ({len(steps)} steps > 10000). Visualization disabled.")
+            messagebox.showwarning("Large Trace", f"The solver recorded {len(steps)} steps, which is too large to visualize.\nThe visualizer will be disabled for this run.")
+            self._load_step_trace([])
+        else:
+            self._load_step_trace(steps)
+            self.write_line(f"Recorded {len(steps)} steps for visualization.")
+
         if algo == "Forward Chaining":
             domains = result["domains"]
             # Extract singleton values for grid display
@@ -655,10 +679,10 @@ class FutoshikiGUI:
             self.write_text(buffer.getvalue())
             self._save_solution(puzzle, assignment)
 
-            if algo.startswith("A*"):
-                steps = result["astar_steps"]
-                self._load_astar_trace(steps)
-                self.write_line(f"A* steps recorded: {len(steps)}")
+            self.write_line("")
+            self.write_line("Solution:")
+            self.write_text(buffer.getvalue())
+            self._save_solution(puzzle, assignment)
 
         self.write_line(f"Solved successfully with {algo}.")
         messagebox.showinfo("Success", f"Solved with {algo} in {runtime:.4f}s")

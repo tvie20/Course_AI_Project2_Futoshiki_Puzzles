@@ -59,6 +59,12 @@ class BruteForceSolver(BaseSolver):
         for value in range(1, N + 1):
             board[row][col] = value
             
+            if self.record_steps:
+                self.steps.append({
+                    "step": self.stats.expansions,
+                    "board": [r[:] for r in board]
+                })
+            
             # Recursively solve without prior checking
             if self._run_algorithm(board, constraints):
                 return True
