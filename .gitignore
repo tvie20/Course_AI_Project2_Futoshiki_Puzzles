@@ -6,3 +6,5 @@ __pycache__/
 # CNF files
 *.cnf
 CNF/
+test_result.md
+output-*.txt
