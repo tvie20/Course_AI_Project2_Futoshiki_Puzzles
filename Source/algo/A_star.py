@@ -140,12 +140,15 @@ class State:
         return self.f < other.f
 
 class AStarSolver(BaseSolver):
-    def __init__(self, time_limit=60.0, max_expansions=1000000, max_inferences=1000000, heuristic_choice='h1'):
+    def __init__(self, time_limit=60.0, max_expansions=1000000, max_inferences=1000000, heuristic_choice='h1', record_steps=False):
         super().__init__(time_limit, max_expansions, max_inferences)
         self.heuristic_choice = heuristic_choice
+        self.record_steps = record_steps
+        self.steps = []  # populated when record_steps=True
 
     def _run_algorithm(self, initial_board, constraints):
         priority_queue = []
+        self.steps = []  # reset on each run
         
         h_start = calculate_heuristic(initial_board, constraints, self.heuristic_choice, self.stats)
         if h_start == float('inf'):
@@ -172,6 +175,17 @@ class AStarSolver(BaseSolver):
                     for c in range(len(current_board)):
                         initial_board[r][c] = current_board[r][c]
                 return True
+            
+            # Record step metadata (array-based, no yield/callbacks)
+            if self.record_steps:
+                self.steps.append({
+                    "step": self.stats.expansions,
+                    "cell": (row, col),       # 0-indexed
+                    "g": g,
+                    "h": f - g,               # h = f - g
+                    "f": f,
+                    "board": [r[:] for r in current_board],  # snapshot
+                })
                 
             N = len(current_board)
             
