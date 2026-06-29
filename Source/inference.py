@@ -46,24 +46,31 @@ class ForwardChainingSolver(BaseSolver):
             if any(len(d) == 0 for d in domains.values()):
                 return False
                 
+            # 1. Lan truyền ràng buộc Hàng & Cột (Row/Column propagation)
+            # Duyệt qua mọi ô, nếu thấy ô nào chỉ còn 1 giá trị khả dĩ (đã chắc chắn),
+            # thuật toán sẽ loại bỏ giá trị đó khỏi miền giá trị của tất cả các ô khác cùng hàng và cùng cột.
             for i in range(1, N + 1):
                 for j in range(1, N + 1):
                     cell = (i, j)
+                    # Nếu miền giá trị của ô chỉ còn 1 khả năng (tức là đã xác định được số)
                     if len(domains[cell]) == 1:
                         val = list(domains[cell])[0]
                         
+                        # Loại bỏ 'val' khỏi miền giá trị của các ô khác trên CÙNG CỘT
                         for c in range(1, N + 1):
                             if c != j and val in domains[(i, c)]:
                                 domains[(i, c)].remove(val)
                                 changed = True
                                 self.stats.inferences += 1
                                 
+                        # Loại bỏ 'val' khỏi miền giá trị của các ô khác trên CÙNG HÀNG
                         for r in range(1, N + 1):
                             if r != i and val in domains[(r, j)]:
                                 domains[(r, j)].remove(val)
                                 changed = True
                                 self.stats.inferences += 1
 
+            # 2. Lan truyền ràng buộc Bất Đẳng Thức (Inequality propagation)
             for constraint in kb["inequality_constraints"]:
                 ctype, cell_A, cell_B = constraint
                 dom_A = domains[cell_A]
@@ -72,8 +79,9 @@ class ForwardChainingSolver(BaseSolver):
                 if not dom_A or not dom_B:
                     return False
 
-                if ctype == "less":
+                if ctype == "less":  # cell_A < cell_B
                     max_B = max(dom_B)
+                    # cell_A không thể lớn hơn hoặc bằng giá trị lớn nhất có thể của cell_B
                     to_remove_A = {x for x in dom_A if x >= max_B}
                     if to_remove_A:
                         domains[cell_A] = dom_A - to_remove_A
@@ -81,14 +89,16 @@ class ForwardChainingSolver(BaseSolver):
                         self.stats.inferences += len(to_remove_A)
                     
                     min_A = min(dom_A)
+                    # cell_B không thể nhỏ hơn hoặc bằng giá trị nhỏ nhất có thể của cell_A
                     to_remove_B = {x for x in dom_B if x <= min_A}
                     if to_remove_B:
                         domains[cell_B] = dom_B - to_remove_B
                         changed = True
                         self.stats.inferences += len(to_remove_B)
 
-                elif ctype == "greater":
+                elif ctype == "greater":  # cell_A > cell_B
                     min_B = min(dom_B)
+                    # cell_A không thể nhỏ hơn hoặc bằng giá trị nhỏ nhất có thể của cell_B
                     to_remove_A = {x for x in dom_A if x <= min_B}
                     if to_remove_A:
                         domains[cell_A] = dom_A - to_remove_A
@@ -96,6 +106,7 @@ class ForwardChainingSolver(BaseSolver):
                         self.stats.inferences += len(to_remove_A)
                     
                     max_A = max(dom_A)
+                    # cell_B không thể lớn hơn hoặc bằng giá trị lớn nhất có thể của cell_A
                     to_remove_B = {x for x in dom_B if x >= max_A}
                     if to_remove_B:
                         domains[cell_B] = dom_B - to_remove_B
@@ -172,39 +183,48 @@ class BackwardChainingSolver(BaseSolver):
         def backtrack(index):
             self.stats.check_limits()
             
+            # Nếu index bằng tổng số ô cần điền -> Đã điền xong tất cả -> Thành công
             if index == len(unassigned_cells):
                 return True
                 
+            # Lấy ô trống hiện tại ra để thử điền
             cell = unassigned_cells[index]
             
             # Popping a subgoal
             self.stats.inferences += 1
             
+            # Thử mọi giá trị khả dĩ
             for val in kb["domains"][cell]:
+                # Kiểm tra xem gán 'val' vào 'cell' có hợp lệ (không vi phạm luật) không?
                 if is_consistent(assignment, cell, val, N, inequality_constraints):
-                    assignment[cell] = val
+                    assignment[cell] = val  # Gán thử (Thực hiện hành động)
                     
+                    # Đệ quy điền tiếp ô tiếp theo (index + 1)
                     if backtrack(index + 1):
-                        return True
+                        return True  # Nếu nhánh này thành công, trả về True luôn
                         
+                    # Nếu nhánh này thất bại, phục hồi trạng thái (Quay lui / Backtrack)
                     del assignment[cell]
                     
+            # Đã thử hết giá trị nhưng không được -> Thất bại, cần quay lui
             return False
 
         if backtrack(0):
             return True
         return False
-def forward_chaining(kb, record_steps=False):
+def forward_chaining(kb, record_steps=False, return_inferences=False):
     """
     Wrapper cho main.py.
     Trả về:
     is_solved: True/False
     domains: dict[(i,j)] -> set(values)
     Nếu record_steps=True: trả về thêm list steps
+    Nếu return_inferences=True: trả về thêm số inferences
     """
     N = kb["N"]
     domains = {cell: set(vals) for cell, vals in kb["domains"].items()}
     steps = []
+    inferences = 0
 
     for constraint in kb["given_constraints"]:
         _, cell, val = constraint
@@ -222,6 +242,10 @@ def forward_chaining(kb, record_steps=False):
             })
 
         if any(len(d) == 0 for d in domains.values()):
+            if return_inferences:
+                if record_steps:
+                    return False, domains, steps, inferences
+                return False, domains, inferences
             if record_steps:
                 return False, domains, steps
             return False, domains
@@ -239,12 +263,14 @@ def forward_chaining(kb, record_steps=False):
                         if c != j and val in domains[other]:
                             domains[other].remove(val)
                             changed = True
+                            inferences += 1
 
                     for r in range(1, N + 1):
                         other = (r, j)
                         if r != i and val in domains[other]:
                             domains[other].remove(val)
                             changed = True
+                            inferences += 1
 
         # Inequality propagation
         for constraint in kb["inequality_constraints"]:
@@ -253,6 +279,10 @@ def forward_chaining(kb, record_steps=False):
             dom_B = domains[cell_B]
 
             if not dom_A or not dom_B:
+                if return_inferences:
+                    if record_steps:
+                        return False, domains, steps, inferences
+                    return False, domains, inferences
                 if record_steps:
                     return False, domains, steps
                 return False, domains
@@ -263,12 +293,14 @@ def forward_chaining(kb, record_steps=False):
                 if remove_A:
                     domains[cell_A] = dom_A - remove_A
                     changed = True
+                    inferences += len(remove_A)
 
                 min_A = min(domains[cell_A])
                 remove_B = {x for x in dom_B if x <= min_A}
                 if remove_B:
                     domains[cell_B] = dom_B - remove_B
                     changed = True
+                    inferences += len(remove_B)
 
             elif ctype == "greater":
                 min_B = min(dom_B)
@@ -276,20 +308,26 @@ def forward_chaining(kb, record_steps=False):
                 if remove_A:
                     domains[cell_A] = dom_A - remove_A
                     changed = True
+                    inferences += len(remove_A)
 
                 max_A = max(domains[cell_A])
                 remove_B = {x for x in dom_B if x >= max_A}
                 if remove_B:
                     domains[cell_B] = dom_B - remove_B
                     changed = True
+                    inferences += len(remove_B)
 
     is_solved = all(len(d) == 1 for d in domains.values())
+    if return_inferences:
+        if record_steps:
+            return is_solved, domains, steps, inferences
+        return is_solved, domains, inferences
     if record_steps:
         return is_solved, domains, steps
     return is_solved, domains
 
 
-def backward_chaining(kb, record_steps=False):
+def backward_chaining(kb, record_steps=False, return_inferences=False):
     """
     Wrapper cho main.py.
     Dùng backtracking để tìm assignment hoàn chỉnh.
@@ -297,12 +335,14 @@ def backward_chaining(kb, record_steps=False):
     is_solved: True/False
     assignment: dict[(i,j)] -> value
     Nếu record_steps=True: trả về thêm list steps
+    Nếu return_inferences=True: trả về thêm số inferences
     """
     N = kb["N"]
     inequality_constraints = kb["inequality_constraints"]
 
     assignment = {}
     steps = []
+    inferences = [0]
 
     for constraint in kb["given_constraints"]:
         _, cell, val = constraint
@@ -354,6 +394,7 @@ def backward_chaining(kb, record_steps=False):
             return True
 
         cell = unassigned_cells[index]
+        inferences[0] += 1
 
         for val in range(1, N + 1):
             if local_is_consistent(cell, val):
@@ -373,6 +414,10 @@ def backward_chaining(kb, record_steps=False):
         return False
 
     solved = backtrack(0)
+    if return_inferences:
+        if record_steps:
+            return solved, assignment, steps, inferences[0]
+        return solved, assignment, inferences[0]
     if record_steps:
         return solved, assignment, steps
     return solved, assignment
