@@ -509,20 +509,22 @@ class FutoshikiGUI:
             if algo == "Forward Chaining":
                 kb = generate_ground_kb(puzzle)
                 t0 = time.perf_counter()
-                is_solved, domains, steps = forward_chaining(kb, record_steps=True)
+                is_solved, domains, steps, inferences = forward_chaining(kb, record_steps=True, return_inferences=True)
                 result["runtime"] = time.perf_counter() - t0
                 result["success"] = bool(is_solved)
                 result["domains"] = domains
                 result["steps"] = steps
+                result["inferences"] = inferences
 
             elif algo == "Backward Chaining":
                 kb = generate_ground_kb(puzzle)
                 t0 = time.perf_counter()
-                is_solved, assignment, steps = backward_chaining(kb, record_steps=True)
+                is_solved, assignment, steps, inferences = backward_chaining(kb, record_steps=True, return_inferences=True)
                 result["runtime"] = time.perf_counter() - t0
                 result["success"] = bool(is_solved)
                 result["assignment"] = assignment
                 result["steps"] = steps
+                result["inferences"] = inferences
 
             # ── Board-based algorithms ────────────────────────────────────────
             else:
@@ -590,7 +592,7 @@ class FutoshikiGUI:
         # Update status bar
         self.runtime_label.config(text=f"Runtime: {runtime:.4f}s")
         if algo in ("Forward Chaining", "Backward Chaining"):
-            self.expand_label.config(text="Inferences/Expansions: N/A (KB-based)")
+            self.expand_label.config(text=f"Expansions: N/A (KB-based)   |   Inferences: {inferences}")
         else:
             self.expand_label.config(
                 text=f"Expansions: {expansions}   |   Inferences: {inferences}"
