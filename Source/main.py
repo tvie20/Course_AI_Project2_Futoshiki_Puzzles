@@ -1,11 +1,8 @@
 import time
 import os
 
-# Import từ module của atu
 from futoshiki_io import read_input
 from kb_generator import generate_ground_kb
-
-# Import thuật toán của stinh
 from inference import forward_chaining, backward_chaining, print_solution
 
 def run_evaluation():

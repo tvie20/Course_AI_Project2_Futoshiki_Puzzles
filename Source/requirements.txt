@@ -1,4 +1,20 @@
-```text
-# No external libraries required for Atu's Data & KB module.
-# Python >= 3.7
-```
+# ============================================================
+# Requirements for Futoshiki Puzzle Solver (Project 2 - CSAI)
+# ============================================================
+# Python >= 3.8 required
+#
+# This project uses ONLY Python Standard Library modules.
+# No third-party packages need to be installed via pip.
+#
+# Standard Library modules used (for reference):
+#   - os               : File and directory operations
+#   - sys              : System path manipulation
+#   - time             : Timing / performance measurement
+#   - threading        : Background solver thread (GUI)
+#   - tkinter          : GUI framework (gui.py)
+#   - tkinter.ttk      : Themed widgets (Combobox, Spinbox, Scale)
+#   - io.StringIO      : In-memory text buffer (gui.py)
+#   - heapq            : Priority queue for A* algorithm
+#   - copy             : Deep-copy board states (A* solver)
+#   - tracemalloc      : Memory profiling (test/run_tests.py)
+#   - argparse         : CLI argument parsing (test/run_tests.py)
